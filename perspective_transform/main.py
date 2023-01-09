@@ -22,10 +22,10 @@ while True:
 	frame = frame[top_crop:]
 
 	# Plotting four circles on the video of the object you want to see the transformation of.
-	cv2.circle(frame, (int(frame_w/2) + top_width, 20), 5, (0, 0, 255), -1)
-	cv2.circle(frame, (int(frame_w/2) - top_width, 20), 5, (0, 0, 255), -1)
-	cv2.circle(frame, (int(frame_w/2), frame_h), 5, (0, 0, 255), -1)
-	cv2.circle(frame, (int(frame_w/2), frame_h), 5, (0, 0, 255), -1)
+	# cv2.circle(frame, (int(frame_w/2) + top_width, 20), 5, (0, 0, 255), -1)
+	# cv2.circle(frame, (int(frame_w/2) - top_width, 20), 5, (0, 0, 255), -1)
+	# cv2.circle(frame, (int(frame_w/2), frame_h), 5, (0, 0, 255), -1)
+	# cv2.circle(frame, (int(frame_w/2), frame_h), 5, (0, 0, 255), -1)
 
 	# Select all the above four points in an array
 	imgPts = np.float32([[int(frame_w/2) - top_width, 20], [frame_w/2 + top_width, 20], [0, frame_h], [frame_w, frame_h]])
@@ -44,7 +44,7 @@ while True:
 	# Now Plotting both the videos(original, warped video)using matplotlib
 	cv2.imshow('Perspective Transformation', comp)
 
-	key = cv2.waitKey(1)
+	key = cv2.waitKey(10)
 	# plt.imshow(frame)
 	plt.show()
 	if key == 27:
