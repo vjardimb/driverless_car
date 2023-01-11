@@ -75,7 +75,7 @@ class AbstractCar:
 
 		self.y -= vert_speed
 		self.x -= horiz_speed
-		self.angle += self.rotation_vel
+		self.angle += math.degrees(self.rotation_vel)
 
 	def reduce_speed(self):
 		self.front_vel = max(self.front_vel - self.acceleration / 2, 0)

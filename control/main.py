@@ -16,9 +16,9 @@ def draw(win, images, player_car):
 
 
 if __name__ == "__main__":
-    steer_control = 0
+    steer_control = 1
     speed_control = 0
-    keep_going = 0
+    keep_going = 1
 
     run = True
     clock = pygame.time.Clock()
@@ -30,7 +30,7 @@ if __name__ == "__main__":
     # images = [(GRASS, (0, 0)), (TRACK, (0, 0))]
     # images = [(TRACK, (0, 0))]
     images = []
-    player_car = PlayerCar(3, 4)
+    player_car = PlayerCar(1, 4)
 
     WIDTH, HEIGHT = TRACK.get_width(), TRACK.get_height()
 
