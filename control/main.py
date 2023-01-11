@@ -16,8 +16,8 @@ def draw(win, images, player_car):
 
 
 if __name__ == "__main__":
-    steer_control = 1
-    speed_control = 1
+    steer_control = 0
+    speed_control = 0
     keep_going = 0
 
     run = True
@@ -74,6 +74,7 @@ if __name__ == "__main__":
 
         turn(player_car, side, pos_error, keys, control=steer_control)
         accelerate(player_car, trgt_speeds, closest_index, keys, control=speed_control, keep_going=keep_going)
+        player_car.move()
 
         # print("ccords", coords)
 
