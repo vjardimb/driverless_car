@@ -102,32 +102,6 @@ def right_or_left(pose, closest_point):
     return "right" if new_closest[0] > 0 else "left", abs(new_closest[0])
 
 
-def turn(car, side, error, keys, control):
-    if keys[pygame.K_a]:
-        car.steer(40, left=True, control=False)
-    elif keys[pygame.K_d]:
-        car.steer(40, right=True, control=False)
-    elif control:
-        if side == "left":
-            car.steer(error, left=True)
-        else:
-            car.steer(error, right=True)
-
-
-def accelerate(car, trgt_speeds, closest_index, keys, control=True, keep_going=False):
-    if keys[pygame.K_w] or keep_going:
-        car.move_forward(0, control=False)
-    elif control:
-        # error = trgt_speeds[closest_index] - car.vel
-        start = (closest_index-10) % len(trgt_speeds)
-        end = start + 50
-        error = np.mean(trgt_speeds[closest_index]) - car.vel
-        # error = np.mean(trgt_speeds[start:end]) - car.vel
-        car.move_forward(error)
-    else:
-        car.reduce_speed()
-
-
 def get_speeds(tck):
     m = 0.03
 
