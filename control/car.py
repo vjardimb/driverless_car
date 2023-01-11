@@ -17,7 +17,8 @@ class AbstractCar:
 		self.rotation_vel = 0
 		self.angle = 0
 		self.steer_angle = 0
-		self.L = 42
+		self.max_steer_angle = 30
+		self.L = 21
 		self.x, self.y = self.START_POS
 		self.acceleration = 0.1
 		self.old_error = 0
@@ -26,17 +27,19 @@ class AbstractCar:
 	def steer(self, error, left=False, right=False, control=True):
 		# kp = 0.07
 		# kd = 0.7
-		kp = 0.09
-		kd = 1.5
-		ki = 4E-4
+		kp = 1
+		# kd = 1.5
+		kd = 7
+		# ki = 4E-4
+		ki = 0
 
-		steer_angle_rate = kp*min(error, 15) + kd*(error - self.old_error) + ki*sum(self.errors_list) if control else 3
+		steer_angle_rate = kp*min(error, 10000000) + kd*(error - self.old_error) + ki*sum(self.errors_list) if control else 3
 
 		if left:
-			if self.steer_angle < 30:
+			if self.steer_angle < self.max_steer_angle:
 				self.steer_angle += min(steer_angle_rate, 30)
 		elif right:
-			if self.steer_angle > -30:
+			if self.steer_angle > - self.max_steer_angle:
 				self.steer_angle -= min(steer_angle_rate, 30)
 
 		self.old_error = error

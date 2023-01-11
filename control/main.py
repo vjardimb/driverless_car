@@ -40,7 +40,7 @@ if __name__ == "__main__":
 
     FPS = 60
 
-    spl_dots, spl_array, tck, u = gen_path(WIN, WIDTH, False)
+    spl_dots, spl_array, tck, u = gen_path(WIN, WIDTH, True)
 
     trgt_speeds = get_speeds(tck)
 
