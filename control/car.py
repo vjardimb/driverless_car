@@ -30,7 +30,7 @@ class AbstractCar:
 		# kd = 0.7
 		kp = 1
 		# kd = 1.5
-		kd = 7
+		kd = 10
 		# ki = 4E-4
 		ki = 0
 
