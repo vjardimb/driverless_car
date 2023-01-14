@@ -4,12 +4,14 @@ import time
 import numpy as np
 import math
 from utils import scale_image, blit_rotate_center
+from path import Dot
 
 RED_CAR = scale_image(pygame.image.load("imgs/red-car.png"), 0.55)
 GREEN_CAR = scale_image(pygame.image.load("imgs/green-car.png"), 0.55)
 
+
 class AbstractCar:
-	def __init__(self, max_vel):
+	def __init__(self, max_vel, start_pos):
 		self.img = self.IMG
 		self.max_vel = max_vel
 		self.min_vel = 1
@@ -20,10 +22,10 @@ class AbstractCar:
 		self.steer_angle = 0
 		self.max_steer_angle = 30
 		self.L = 10
-		self.x, self.y = self.START_POS
+		self.x, self.y = start_pos
 		self.acceleration = 0.1
 		self.old_error = 0
-		self.errors_list = [0]*100
+		self.errors_list = [0] * 100
 
 	def steer(self, error, left=False, right=False, control=True):
 		# kp = 0.07
@@ -34,7 +36,8 @@ class AbstractCar:
 		# ki = 4E-4
 		ki = 0
 
-		steer_angle_rate = kp*min(error, 10000000) + kd*(error - self.old_error) + ki*sum(self.errors_list) if control else 3
+		steer_angle_rate = kp * min(error, 10000000) + kd * (error - self.old_error) + ki * sum(
+			self.errors_list) if control else 3
 
 		if left:
 			if self.steer_angle < self.max_steer_angle:
@@ -54,7 +57,7 @@ class AbstractCar:
 		kp = 2
 
 		if control:
-			acceleration = kp*error
+			acceleration = kp * error
 		else:
 			acceleration = self.acceleration
 
@@ -86,7 +89,7 @@ class AbstractCar:
 
 	def bike_kinematics(self):
 		steer_ang = math.radians(self.steer_angle)
-		slip_ang = math.atan(math.tan(steer_ang)/2)
+		slip_ang = math.atan(math.tan(steer_ang) / 2)
 		# rad_slip_ang = math.radians(slip_ang)
 		S = self.L / math.tan(steer_ang) if steer_ang != 0 else 10E6
 		R1 = S / math.cos(slip_ang)
@@ -103,10 +106,7 @@ class AbstractCar:
 
 		return orientation, vert_speed, horiz_speed
 
-	def move(self, side, error, closest_index, keys, trgt_speeds, steer_control, speed_control, keep_going):
-		self.turn(side, error, keys, control=steer_control)
-		self.accelerate(trgt_speeds, closest_index, keys, control=speed_control, keep_going=keep_going)
-
+	def move(self):
 		orientation, vert_speed, horiz_speed = self.bike_kinematics()
 
 		self.y -= vert_speed
@@ -115,9 +115,52 @@ class AbstractCar:
 
 	def reduce_speed(self):
 		self.front_vel = max(self.front_vel - self.acceleration / 2, 0)
-		# self.move()
+
+	def right_or_left(self, closest_point):
+		angle = math.radians(self.angle)
+
+		c_x = closest_point[0]
+		c_y = closest_point[1]
+
+		rotation_matrix = [[math.cos(angle), -math.sin(angle), 0],
+						   [math.sin(angle), math.cos(angle), 0],
+						   [0, 0, 1]]
+
+		transl_vector = [[self.x],
+						 [self.y],
+						 [0]]
+
+		position = [[c_x],
+					[c_y],
+					[0]]
+
+		new_closest = np.dot(rotation_matrix, np.array(position) - np.array(transl_vector))
+
+		return "right" if new_closest[0] > 0 else "left", abs(new_closest[0])
+
+	def get_closest_point(self, spl_array, screen):
+		position = np.array([self.x, self.y]).reshape((1, 2))
+		position = np.repeat(position, len(spl_array), axis=0)
+
+		dists_sqrd = np.sum((position - spl_array) ** 2, axis=1)
+		closest_index = np.argmin(dists_sqrd)
+
+		dot = Dot(screen, "red", (spl_array[closest_index, 0], spl_array[closest_index, 1]), 8)
+		closest_coords = (spl_array[closest_index, 0], spl_array[closest_index, 1])
+		return dot, closest_coords, closest_index
+
+	def pid(self, WIN, spl_array, keys, trgt_speeds, steer_control, speed_control, keep_going):
+		# get reference
+		closest_dot, closest_point, closest_index = self.get_closest_point(spl_array, WIN)
+
+		# get error
+		side, pos_error = self.right_or_left(closest_point)
+
+		# apply command
+		self.turn(side, pos_error, keys, control=steer_control)
+		self.accelerate(trgt_speeds, closest_index, keys, control=speed_control, keep_going=keep_going)
 
 
 class PlayerCar(AbstractCar):
 	IMG = RED_CAR
-	START_POS = (180, 200)
+	# START_POS = (180, 200)

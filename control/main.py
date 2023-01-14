@@ -3,7 +3,7 @@ import time
 import math
 
 from car import PlayerCar
-from path import gen_path, get_closest_point, right_or_left, get_speeds
+from path import gen_path, get_closest_point, get_speeds, get_top_point
 from utils import scale_image, blit_rotate_center
 
 
@@ -42,8 +42,11 @@ if __name__ == "__main__":
     spl_dots, spl_array, tck, u = gen_path(WIN, WIDTH, True)
     trgt_speeds = get_speeds(tck)
 
+    # Get initisl position
+    init_x, init_y = get_top_point(spl_array, standard=0)
+
     # Initialize car
-    player_car = PlayerCar(1)
+    player_car = PlayerCar(1, (init_x, init_y))
 
     while run:
         clock.tick(FPS)
@@ -62,9 +65,8 @@ if __name__ == "__main__":
         for dot in spl_dots:
             dot.update()
 
-        side, pos_error = right_or_left((player_car.x, player_car.y, player_car.angle), coords)
-
-        player_car.move(side, pos_error, closest_index, keys, trgt_speeds, steer_control, speed_control, keep_going)
+        player_car.pid(WIN, spl_array, keys, trgt_speeds, steer_control, speed_control, keep_going)
+        player_car.move()
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
