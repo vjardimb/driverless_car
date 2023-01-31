@@ -64,6 +64,17 @@ def gen_path(screen, dim, random=True):
     return spl_dots, np.concatenate((xi.reshape((xi.shape[0], 1)), yi.reshape((yi.shape[0], 1))), axis=1), tck, np.linspace(0, 1, 1000)
 
 
+def get_top_point(spl_array, standard=False):
+    highest_index = np.argmin(spl_array[:, 0])
+
+    if standard:
+        x, y = 180, 200
+    else:
+        x, y = spl_array[highest_index, 0], spl_array[highest_index, 1]
+
+    return x, y
+
+
 def get_closest_point(pose, spl_array, screen):
     position = np.array([pose[0], pose[1]]).reshape((1, 2))
     position = np.repeat(position, len(spl_array), axis=0)
@@ -72,58 +83,6 @@ def get_closest_point(pose, spl_array, screen):
     closest_index = np.argmin(dists_sqrd)
 
     return Dot(screen, "red", (spl_array[closest_index, 0], spl_array[closest_index, 1]), 8), (spl_array[closest_index, 0], spl_array[closest_index, 1]), closest_index
-
-
-def right_or_left(pose, closest_point):
-    x = pose[0]
-    y = pose[1]
-    angle = math.radians(pose[2])
-
-    c_x = closest_point[0]
-    c_y = closest_point[1]
-
-    rotation_matrix = [[math.cos(angle), -math.sin(angle), 0],
-                       [math.sin(angle), math.cos(angle), 0],
-                       [0, 0, 1]]
-
-    transl_vector = [[x],
-                     [y],
-                     [0]]
-
-    position = [[c_x],
-                [c_y],
-                [0]]
-
-    new_closest = np.dot(rotation_matrix, np.array(position)-np.array(transl_vector))
-
-    # multiplier = 1 if math.sin(angle) > 0 else -1
-
-    # return "right" if new_closest[1]*multiplier > 1 else "left", (new_closest[0], new_closest[1])
-    return "right" if new_closest[0] > 0 else "left", abs(new_closest[0])
-
-
-def turn(car, side, error, keys, control):
-    if keys[pygame.K_a]:
-        car.rotate(40, left=True, control=False)
-    elif keys[pygame.K_d]:
-        car.rotate(40, right=True, control=False)
-    elif control:
-        if side == "left":
-            car.rotate(error, left=True)
-        else:
-            car.rotate(error, right=True)
-
-
-def accelerate(car, trgt_speeds, closest_index, keys, control=True, keep_going=False):
-    if keys[pygame.K_w] or keep_going:
-        car.move_forward(0, control=False)
-    elif control:
-        # error = trgt_speeds[closest_index] - car.vel
-        start = (closest_index-10) % len(trgt_speeds)
-        end = start + 50
-        error = np.mean(trgt_speeds[closest_index]) - car.vel
-        # error = np.mean(trgt_speeds[start:end]) - car.vel
-        car.move_forward(error)
 
 
 def get_speeds(tck):

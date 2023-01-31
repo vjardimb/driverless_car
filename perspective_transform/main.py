@@ -44,7 +44,7 @@ while True:
 	# Now Plotting both the videos(original, warped video)using matplotlib
 	cv2.imshow('Perspective Transformation', comp)
 
-	key = cv2.waitKey(1)
+	key = cv2.waitKey(10)
 	# plt.imshow(frame)
 	plt.show()
 	if key == 27:
