@@ -7,7 +7,13 @@ import time
 
 import matplotlib.pyplot as plt
 
-from mpc.helpers import get_linear_model, compute_path_from_wp, road_curve, get_nn_idx, f, df, kinematics_model, get_ref_trajectory
+from mpc.helpers import (
+    get_linear_model,
+    compute_path_from_wp,
+    kinematics_model,
+    get_ref_trajectory,
+    plot_results
+)
 
 plt.style.use("ggplot")
 
@@ -18,12 +24,19 @@ M = 2  # number of control variables
 T = 20  # Prediction Horizon (steps)
 DT = 0.2  # discretization step
 
-track = compute_path_from_wp(
-    [0, 3, 4, 6, 10, 12, 14, 6, 1, 0], [0, 0, 2, 4, 3, 3, -2, -6, -2, -2], 0.05
+track_points = (
+    [0, 3, 4, 6, 10, 12, 14, 6, 1, 0],
+    [0, 0, 2, 4, 3, 3, -2, -6, -2, -2]
 )
 
-# track = compute_path_from_wp([0,10,10,0],
-#                              [0,0,1,1],0.05)
+track_points_2 = (
+    [0, 10, 10, 0],
+    [0, 0, 1, 1]
+)
+
+dl = 0.2  # Waypoints spacing [m]
+
+track = compute_path_from_wp(track_points[0], track_points[1], dl)
 
 sim_duration = 200  # time steps
 opt_time = []
@@ -79,8 +92,8 @@ for sim_time in range(sim_duration - 1):
     R = np.diag([10, 10])  # input cost
     R_ = np.diag([10, 10])  # input rate of change cost
 
-    # Get Reference_traj
-    x_ref, d_ref = get_ref_trajectory(x_bar[:, 0], track, REF_VEL, N, T, DT)
+    # Get reference trajectory
+    x_ref, d_ref = get_ref_trajectory(x_bar[:, 0], track, REF_VEL, N, T, DT, dl)
 
     # Prediction Horizon
     for t in range(T):
@@ -136,33 +149,5 @@ print(
     )
 )
 
-# plot trajectory
-grid = plt.GridSpec(4, 5)
+plot_results(x_sim, u_sim, track)
 
-plt.figure(figsize=(15, 10))
-
-plt.subplot(grid[0:4, 0:4])
-plt.plot(track[0, :], track[1, :], "b+")
-plt.plot(x_sim[0, :], x_sim[1, :])
-plt.axis("equal")
-plt.ylabel("y")
-plt.xlabel("x")
-
-plt.subplot(grid[0, 4])
-plt.plot(u_sim[0, :])
-plt.ylabel("a(t) [m/ss]")
-
-plt.subplot(grid[1, 4])
-plt.plot(x_sim[2, :])
-plt.ylabel("v(t) [m/s]")
-
-plt.subplot(grid[2, 4])
-plt.plot(np.degrees(u_sim[1, :]))
-plt.ylabel("delta(t) [rad]")
-
-plt.subplot(grid[3, 4])
-plt.plot(x_sim[3, :])
-plt.ylabel("theta(t) [rad]")
-
-plt.tight_layout()
-plt.show()

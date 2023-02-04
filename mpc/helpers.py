@@ -1,5 +1,7 @@
 import numpy as np
 from scipy.interpolate import interp1d
+import matplotlib.pyplot as plt
+
 
 
 def get_linear_model(x_bar, u_bar, DT, N, M):
@@ -76,10 +78,10 @@ def road_curve(state, track):
 
     # given vehicle pos find lookahead waypoints
     nn_idx = get_nn_idx(state, track) - 1
-    LOOKAHED = 6
-    lk_wp = track[:, nn_idx : nn_idx + LOOKAHED]
+    LOOK_AHEAD = 6
+    lk_wp = track[:, nn_idx: nn_idx + LOOK_AHEAD]
 
-    # trasform lookahead waypoints to vehicle ref frame
+    # transform lookahead waypoints to vehicle ref frame
     dx = lk_wp[0, :] - state[0]
     dy = lk_wp[1, :] - state[1]
 
@@ -117,7 +119,8 @@ def get_nn_idx(state, path):
             path[0, nn_idx + 1] - path[0, nn_idx],
             path[1, nn_idx + 1] - path[1, nn_idx],
         ]
-        v /= np.linalg.norm(v)
+
+        # v /= np.linalg.norm(v)
 
         d = [path[0, nn_idx] - state[0], path[1, nn_idx] - state[1]]
 
@@ -159,7 +162,7 @@ def kinematics_model(x, t, u):
 
     return dqdt
 
-def get_ref_trajectory(state, path, target_v, N, T, DT):
+def get_ref_trajectory(state, path, target_v, N, T, DT, dl):
     """
     Adapted from pythonrobotics
     """
@@ -178,7 +181,6 @@ def get_ref_trajectory(state, path, target_v, N, T, DT):
     xref[3, 0] = path[2, ind]  # Theta
     dref[0, 0] = 0.0  # steer operational point should be 0
 
-    dl = 0.05  # Waypoints spacing [m]
     travel = 0.0
 
     for i in range(T + 1):
@@ -199,3 +201,36 @@ def get_ref_trajectory(state, path, target_v, N, T, DT):
             dref[0, i] = 0.0
 
     return xref, dref
+
+
+def plot_results(x_sim, u_sim, track):
+    # plot trajectory
+    grid = plt.GridSpec(4, 5)
+
+    plt.figure(figsize=(15, 10))
+
+    plt.subplot(grid[0:4, 0:4])
+    plt.plot(track[0, :], track[1, :], "b+")
+    plt.plot(x_sim[0, :], x_sim[1, :])
+    plt.axis("equal")
+    plt.ylabel("y")
+    plt.xlabel("x")
+
+    plt.subplot(grid[0, 4])
+    plt.plot(u_sim[0, :])
+    plt.ylabel("a(t) [m/ss]")
+
+    plt.subplot(grid[1, 4])
+    plt.plot(x_sim[2, :])
+    plt.ylabel("v(t) [m/s]")
+
+    plt.subplot(grid[2, 4])
+    plt.plot(np.degrees(u_sim[1, :]))
+    plt.ylabel("delta(t) [rad]")
+
+    plt.subplot(grid[3, 4])
+    plt.plot(x_sim[3, :])
+    plt.ylabel("theta(t) [rad]")
+
+    plt.tight_layout()
+    plt.show()
