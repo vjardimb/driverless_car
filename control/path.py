@@ -13,15 +13,16 @@ class Dot:
         self.pos = pos
         self.size = size
 
-    def update(self):
+    def draw(self):
         pygame.draw.circle(self.screen, self.color, self.pos, self.size)
 
 
 def gen_path(screen, dim, random=True):
-    # generate 20 random points
     if random:
+        # generate 20 random points
         points = np.random.randint(dim*0.2, dim*0.8, size=(20, 2))
     else:
+        # in case we don't want a random track
         points = np.array([[194, 250],
            [227, 174],
            [429, 402],
@@ -48,9 +49,7 @@ def gen_path(screen, dim, random=True):
     x_vertices = np.r_[points[hull.vertices, 0], points[hull.vertices[0], 0]]
     y_vertices = np.r_[points[hull.vertices, 1], points[hull.vertices[0], 1]]
 
-    corner_dots = []
     spl_dots = []
-    der_dots = []
 
     # fit splines to x=f(u) and y=g(u), treating both as periodic. also note that s=0
     # is needed in order to force the spline fit to pass through all the input points.
@@ -61,10 +60,10 @@ def gen_path(screen, dim, random=True):
     for [x, y] in zip(xi, yi):
         spl_dots.append(Dot(screen, "yellow", (x, y), 3))
 
-    return spl_dots, np.concatenate((xi.reshape((xi.shape[0], 1)), yi.reshape((yi.shape[0], 1))), axis=1), tck, np.linspace(0, 1, 1000)
+    return spl_dots, np.concatenate((xi.reshape((xi.shape[0], 1)), yi.reshape((yi.shape[0], 1))), axis=1), tck
 
 
-def get_top_point(spl_array, standard=False):
+def get_start_point(spl_array, standard=False):
     highest_index = np.argmin(spl_array[:, 0])
 
     if standard:
@@ -75,14 +74,14 @@ def get_top_point(spl_array, standard=False):
     return x, y
 
 
-def get_closest_point(pose, spl_array, screen):
+def get_closest_point(pose, spl_array):
     position = np.array([pose[0], pose[1]]).reshape((1, 2))
     position = np.repeat(position, len(spl_array), axis=0)
 
     dists_sqrd = np.sum((position - spl_array)**2, axis=1)
     closest_index = np.argmin(dists_sqrd)
 
-    return Dot(screen, "red", (spl_array[closest_index, 0], spl_array[closest_index, 1]), 8), (spl_array[closest_index, 0], spl_array[closest_index, 1]), closest_index
+    return (spl_array[closest_index, 0], spl_array[closest_index, 1]), closest_index
 
 
 def get_speeds(tck):

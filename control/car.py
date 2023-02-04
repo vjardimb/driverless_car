@@ -27,7 +27,7 @@ class AbstractCar:
 		self.old_error = 0
 		self.errors_list = [0] * 100
 
-	def steer(self, error, left=False, right=False, control=True):
+	def steer(self, error, left=False, right=False, pid_control=True):
 		# kp = 0.07
 		# kd = 0.7
 		kp = 1
@@ -37,7 +37,7 @@ class AbstractCar:
 		ki = 0
 
 		steer_angle_rate = kp * min(error, 10000000) + kd * (error - self.old_error) + ki * sum(
-			self.errors_list) if control else 3
+			self.errors_list) if pid_control else 3
 
 		if left:
 			if self.steer_angle < self.max_steer_angle:
@@ -53,52 +53,44 @@ class AbstractCar:
 	def draw(self, win):
 		blit_rotate_center(win, self.img, (self.x, self.y), self.angle)
 
-	def move_forward(self, error, control=True):
+	def move_forward(self, error, pid_control=True):
 		kp = 2
 
-		if control:
+		if pid_control:
 			acceleration = kp * error
 		else:
 			acceleration = self.acceleration
 
 		self.front_vel = max(min(self.front_vel + acceleration, self.max_vel), self.min_vel)
 
-	def turn(self, side, error, keys, control):
+	def turn(self, side, error, keys, pid_control):
 		if keys[pygame.K_a]:
-			self.steer(40, left=True, control=False)
+			self.steer(40, left=True, pid_control=False)
 		elif keys[pygame.K_d]:
-			self.steer(40, right=True, control=False)
-		elif control:
+			self.steer(40, right=True, pid_control=False)
+		elif pid_control:
 			if side == "left":
 				self.steer(error, left=True)
 			else:
 				self.steer(error, right=True)
 
-	def accelerate(car, trgt_speeds, closest_index, keys, control=True, keep_going=False):
+	def accelerate(self, error, keys, pid_control=True, keep_going=False):
 		if keys[pygame.K_w] or keep_going:
-			car.move_forward(0, control=False)
-		elif control:
-			# error = trgt_speeds[closest_index] - car.vel
-			start = (closest_index - 10) % len(trgt_speeds)
-			end = start + 50
-			error = np.mean(trgt_speeds[closest_index]) - car.vel
-			# error = np.mean(trgt_speeds[start:end]) - car.vel
-			car.move_forward(error)
+			self.move_forward(0, pid_control=False)
+		elif pid_control:
+			self.move_forward(error)
 		else:
-			car.reduce_speed()
+			self.reduce_speed()
 
 	def bike_kinematics(self):
 		steer_ang = math.radians(self.steer_angle)
 		slip_ang = math.atan(math.tan(steer_ang) / 2)
-		# rad_slip_ang = math.radians(slip_ang)
-		S = self.L / math.tan(steer_ang) if steer_ang != 0 else 10E6
+		S = self.L / math.tan(steer_ang) if steer_ang != 0 else 10E6  # to avoid divisions by 0
 		R1 = S / math.cos(slip_ang)
 		R2 = S / math.cos(steer_ang)
 
 		self.rotation_vel = self.front_vel / R2
 		self.vel = self.rotation_vel * R1
-
-		print("R2: ", R2, "      rotation_vel: ", self.rotation_vel)
 
 		orientation = math.radians(self.angle)
 		vert_speed = math.cos(orientation + steer_ang) * self.vel
@@ -116,7 +108,7 @@ class AbstractCar:
 	def reduce_speed(self):
 		self.front_vel = max(self.front_vel - self.acceleration / 2, 0)
 
-	def right_or_left(self, closest_point):
+	def trgt_position(self, closest_point):
 		angle = math.radians(self.angle)
 
 		c_x = closest_point[0]
@@ -147,20 +139,22 @@ class AbstractCar:
 
 		dot = Dot(screen, "red", (spl_array[closest_index, 0], spl_array[closest_index, 1]), 8)
 		closest_coords = (spl_array[closest_index, 0], spl_array[closest_index, 1])
+
 		return dot, closest_coords, closest_index
 
-	def pid(self, WIN, spl_array, keys, trgt_speeds, steer_control, speed_control, keep_going):
+	def controller(self, WIN, spl_array, keys, trgt_speeds, control_info):
 		# get reference
 		closest_dot, closest_point, closest_index = self.get_closest_point(spl_array, WIN)
+		speed_ref = trgt_speeds[closest_index]
 
 		# get error
-		side, pos_error = self.right_or_left(closest_point)
+		side, pos_error = self.trgt_position(closest_point)
+		speed_error = speed_ref - self.vel
 
 		# apply command
-		self.turn(side, pos_error, keys, control=steer_control)
-		self.accelerate(trgt_speeds, closest_index, keys, control=speed_control, keep_going=keep_going)
+		self.turn(side, pos_error, keys, pid_control=control_info[0])
+		self.accelerate(speed_error, keys, pid_control=control_info[1], keep_going=control_info[2])
 
 
 class PlayerCar(AbstractCar):
 	IMG = RED_CAR
-	# START_POS = (180, 200)
