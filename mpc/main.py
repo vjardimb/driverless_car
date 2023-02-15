@@ -1,153 +1,296 @@
-import numpy as np
-from scipy.integrate import odeint
-from scipy.interpolate import interp1d
-import cvxpy as cp
 
+
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import animation
+from scipy.integrate import odeint
+
+from helpers import compute_path_from_wp
+import mpc
+
+import sys
 import time
 
-import matplotlib.pyplot as plt
+# Robot Starting position
+SIM_START_X = 0.0
+SIM_START_Y = 0.5
+SIM_START_V = 0.0
+SIM_START_H = 0.0
+L = 0.3
 
-from mpc.helpers import (
-    get_linear_model,
-    compute_path_from_wp,
-    kinematics_model,
-    get_ref_trajectory,
-    plot_results
-)
+P = mpc.Params()
 
-plt.style.use("ggplot")
+# Params
+VEL = 1.0  # m/s
 
-# Control problem statement.
 
-N = 4  # number of state variables
-M = 2  # number of control variables
-T = 20  # Prediction Horizon (steps)
-DT = 0.2  # discretization step
+# Classes
+class MPCSim:
+    def __init__(self):
 
-track_points = (
-    [0, 3, 4, 6, 10, 12, 14, 6, 1, 0],
-    [0, 0, 2, 4, 3, 3, -2, -6, -2, -2]
-)
+        # State for the robot mathematical model [x,y,heading]
+        self.state = np.array([SIM_START_X, SIM_START_Y, SIM_START_V, SIM_START_H])
 
-track_points_2 = (
-    [0, 10, 10, 0],
-    [0, 0, 1, 1]
-)
+        # starting guess
+        self.action = np.zeros(P.M)
+        self.action[0] = P.MAX_ACC / 2  # a
+        self.action[1] = 0.0  # delta
 
-dl = 0.2  # Waypoints spacing [m]
+        self.opt_u = np.zeros((P.M, P.T))
 
-track = compute_path_from_wp(track_points[0], track_points[1], dl)
+        # Cost Matrices
+        Q = np.diag([20, 20, 10, 20])  # state error cost
+        Qf = np.diag([30, 30, 30, 30])  # state final error cost
+        R = np.diag([10, 10])  # input cost
+        R_ = np.diag([10, 10])  # input rate of change cost
 
-sim_duration = 200  # time steps
-opt_time = []
+        self.mpc = mpc.MPC(P.N, P.M, Q, R)
 
-x_sim = np.zeros((N, sim_duration))
-u_sim = np.zeros((M, sim_duration - 1))
+        # Interpolated Path to follow given waypoints
+        self.path = compute_path_from_wp(
+            [0, 3, 4, 6, 10, 12, 13, 13, 6, 1, 0],
+            [0, 0, 2, 4, 3, 3, -1, -2, -6, -2, -2],
+            P.path_tick,
+        )
 
-MAX_SPEED = 1.5  # m/s
-MAX_ACC = 1.0  # m/ss
-MAX_D_ACC = 1.0  # m/sss
-MAX_STEER = np.radians(30)  # rad
-MAX_D_STEER = np.radians(30)  # rad/s
+        # Sim help vars
+        self.sim_time = 0
+        self.x_history = []
+        self.y_history = []
+        self.v_history = []
+        self.h_history = []
+        self.a_history = []
+        self.d_history = []
+        self.predicted = None
 
-REF_VEL = 1.0  # m/s
+        # Initialise plot
+        plt.style.use("ggplot")
+        self.fig = plt.figure()
+        plt.ion()
+        plt.show()
 
-# Starting Condition
-x0 = np.zeros(N)
-x0[0] = 0  # x
-x0[1] = -0.25  # y
-x0[2] = 0.0  # v
-x0[3] = np.radians(-0)  # yaw
+    def preview(self, mpc_out):
+        """
+        [TODO:summary]
+        [TODO:description]
+        """
+        predicted = np.zeros(self.opt_u.shape)
+        predicted[:, :] = mpc_out[0:2, 1:]
+        Rotm = np.array(
+            [
+                [np.cos(self.state[3]), np.sin(self.state[3])],
+                [-np.sin(self.state[3]), np.cos(self.state[3])],
+            ]
+        )
+        predicted = (predicted.T.dot(Rotm)).T
+        predicted[0, :] += self.state[0]
+        predicted[1, :] += self.state[1]
+        self.predicted = predicted
 
-# starting guess
-u_bar = np.zeros((M, T))
-u_bar[0, :] = MAX_ACC / 2  # a
-u_bar[1, :] = 0.0  # delta
+    def run(self):
+        """
+        [TODO:summary]
+        [TODO:description]
+        """
+        self.plot_sim()
+        input("Press Enter to continue...")
+        while 1:
+            if (
+                np.sqrt(
+                    (self.state[0] - self.path[0, -1]) ** 2
+                    + (self.state[1] - self.path[1, -1]) ** 2
+                )
+                < 0.5
+            ):
+                print("Success! Goal Reached")
+                input("Press Enter to continue...")
+                return
+            # optimization loop
+            # start=time.time()
 
-for sim_time in range(sim_duration - 1):
+            # dynamycs w.r.t robot frame
+            curr_state = np.array([0, 0, self.state[2], 0])
+            # State Matrices
+            A, B, C = mpc.get_linear_model_matrices(curr_state, self.action)
+            # Get Reference_traj -> inputs are in worldframe
+            target, _ = mpc.get_ref_trajectory(
+                self.state, self.path, VEL, dl=P.path_tick
+            )
 
-    iter_start = time.time()
+            x_mpc, u_mpc = self.mpc.optimize_linearized_model(
+                A,
+                B,
+                C,
+                curr_state,
+                target,
+                time_horizon=P.T,
+                verbose=False,
+            )
+            self.opt_u = np.vstack(
+                (
+                    np.array(u_mpc.value[0, :]).flatten(),
+                    (np.array(u_mpc.value[1, :]).flatten()),
+                )
+            )
+            self.action[:] = [u_mpc.value[0, 0], u_mpc.value[1, 0]]
+            # print("CVXPY Optimization Time: {:.4f}s".format(time.time()-start))
+            self.predict([self.action[0], self.action[1]])
+            self.preview(x_mpc.value)
+            self.plot_sim()
 
-    # dynamics starting state
-    x_bar = np.zeros((N, T + 1))
-    x_bar[:, 0] = x_sim[:, sim_time]
+    def predict(self, u):
+        def kinematics_model(x, t, u):
+            dxdt = x[2] * np.cos(x[3])
+            dydt = x[2] * np.sin(x[3])
+            dvdt = u[0]
+            dtheta0dt = x[2] * np.tan(u[1]) / P.L
+            dqdt = [dxdt, dydt, dvdt, dtheta0dt]
+            return dqdt
 
-    # prediction for linearization of constrains
-    for t in range(1, T + 1):
-        xt = x_bar[:, t - 1].reshape(N, 1)
-        ut = u_bar[:, t - 1].reshape(M, 1)
-        A, B, C = get_linear_model(xt, ut, DT, N, M)
-        xt_plus_one = np.squeeze(np.dot(A, xt) + np.dot(B, ut) + C)
-        x_bar[:, t] = xt_plus_one
+        # solve ODE
+        tspan = [0, P.DT]
+        self.state = odeint(kinematics_model, self.state, tspan, args=(u[:],))[1]
 
-    # CVXPY Linear MPC problem statement
-    x = cp.Variable((N, T + 1))
-    u = cp.Variable((M, T))
-    cost = 0
-    constr = []
+    def plot_sim(self):
+        """
+        [TODO:summary]
+        [TODO:description]
+        """
+        self.sim_time = self.sim_time + P.DT
+        self.x_history.append(self.state[0])
+        self.y_history.append(self.state[1])
+        self.v_history.append(self.state[2])
+        self.h_history.append(self.state[3])
+        self.a_history.append(self.opt_u[0, 1])
+        self.d_history.append(self.opt_u[1, 1])
 
-    # Cost Matrices
-    Q = np.diag([20, 20, 10, 0])  # state error cost
-    Qf = np.diag([30, 30, 30, 0])  # state final error cost
-    R = np.diag([10, 10])  # input cost
-    R_ = np.diag([10, 10])  # input rate of change cost
+        plt.clf()
 
-    # Get reference trajectory
-    x_ref, d_ref = get_ref_trajectory(x_bar[:, 0], track, REF_VEL, N, T, DT, dl)
+        grid = plt.GridSpec(2, 3)
 
-    # Prediction Horizon
-    for t in range(T):
+        plt.subplot(grid[0:2, 0:2])
+        plt.title(
+            "MPC Simulation \n" + "Simulation elapsed time {}s".format(self.sim_time)
+        )
 
-        # Tracking Error
-        cost += cp.quad_form(x[:, t] - x_ref[:, t], Q)
+        plt.plot(
+            self.path[0, :],
+            self.path[1, :],
+            c="tab:orange",
+            marker=".",
+            label="reference track",
+        )
 
-        # Actuation effort
-        cost += cp.quad_form(u[:, t], R)
+        plt.plot(
+            self.x_history,
+            self.y_history,
+            c="tab:blue",
+            marker=".",
+            alpha=0.5,
+            label="vehicle trajectory",
+        )
 
-        # Actuation rate of change
-        if t < (T - 1):
-            cost += cp.quad_form(u[:, t + 1] - u[:, t], R_)
+        if self.predicted is not None:
+            plt.plot(
+                self.predicted[0, :],
+                self.predicted[1, :],
+                c="tab:blue",
+                marker="+",
+                alpha=0.5,
+                label="mpc opt trajectory",
+            )
 
-            constr += [cp.abs(u[0, t + 1] - u[0, t]) / DT <= MAX_D_ACC]  # max acc rate of change
-            constr += [cp.abs(u[1, t + 1] - u[1, t]) / DT <= MAX_D_STEER]  # max steer rate of change
+        # plt.plot(self.x_history[-1], self.y_history[-1], c='tab:blue',
+        #                                                  marker=".",
+        #                                                  markersize=12,
+        #                                                  label="vehicle position")
+        # plt.arrow(self.x_history[-1],
+        #           self.y_history[-1],
+        #           np.cos(self.h_history[-1]),
+        #           np.sin(self.h_history[-1]),
+        #           color='tab:blue',
+        #           width=0.2,
+        #           head_length=0.5,
+        #           label="heading")
 
-        # Kinematics Constraints (Linearized model)
-        A, B, C = get_linear_model(x_bar[:, t], u_bar[:, t], DT, N, M)
-        constr += [x[:, t + 1] == A @ x[:, t] + B @ u[:, t] + C.flatten()]
+        plot_car(self.x_history[-1], self.y_history[-1], self.h_history[-1])
 
-    # Final Point tracking
-    cost += cp.quad_form(x[:, T] - x_ref[:, T], Qf)
+        plt.ylabel("map y")
+        plt.yticks(
+            np.arange(min(self.path[1, :]) - 1.0, max(self.path[1, :] + 1.0) + 1, 1.0)
+        )
+        plt.xlabel("map x")
+        plt.xticks(
+            np.arange(min(self.path[0, :]) - 1.0, max(self.path[0, :] + 1.0) + 1, 1.0)
+        )
+        plt.axis("equal")
+        # plt.legend()
 
-    # sums problem objectives and concatenates constraints.
-    constr += [x[:, 0] == x_bar[:, 0]]  # starting condition
-    constr += [x[2, :] <= MAX_SPEED]  # max speed
-    constr += [x[2, :] >= 0.0]  # min_speed (not really needed)
-    constr += [cp.abs(u[0, :]) <= MAX_ACC]  # max acc
-    constr += [cp.abs(u[1, :]) <= MAX_STEER]  # max steer
+        plt.subplot(grid[0, 2])
+        # plt.title("Linear Velocity {} m/s".format(self.v_history[-1]))
+        plt.plot(self.a_history, c="tab:orange")
+        locs, _ = plt.xticks()
+        plt.xticks(locs[1:], locs[1:] * P.DT)
+        plt.ylabel("a(t) [m/ss]")
+        plt.xlabel("t [s]")
 
-    # Solve
-    prob = cp.Problem(cp.Minimize(cost), constr)
-    solution = prob.solve(solver=cp.OSQP, verbose=False)
+        plt.subplot(grid[1, 2])
+        # plt.title("Angular Velocity {} m/s".format(self.w_history[-1]))
+        plt.plot(np.degrees(self.d_history), c="tab:orange")
+        plt.ylabel("gamma(t) [deg]")
+        locs, _ = plt.xticks()
+        plt.xticks(locs[1:], locs[1:] * P.DT)
+        plt.xlabel("t [s]")
 
-    # retrieved optimized U and assign to u_bar to linearize in next step
-    u_bar = np.vstack(
-        (np.array(u.value[0, :]).flatten(), (np.array(u.value[1, :]).flatten()))
+        plt.tight_layout()
+
+        plt.draw()
+        plt.pause(0.1)
+
+
+def plot_car(x, y, yaw):
+    """
+    [TODO:summary]
+    [TODO:description]
+    Parameters
+    ----------
+    x : [TODO:type]
+        [TODO:description]
+    y : [TODO:type]
+        [TODO:description]
+    yaw : [TODO:type]
+        [TODO:description]
+    """
+    LENGTH = 0.5  # [m]
+    WIDTH = 0.25  # [m]
+    OFFSET = LENGTH  # [m]
+
+    outline = np.array(
+        [
+            [-OFFSET, (LENGTH - OFFSET), (LENGTH - OFFSET), -OFFSET, -OFFSET],
+            [WIDTH / 2, WIDTH / 2, -WIDTH / 2, -WIDTH / 2, WIDTH / 2],
+        ]
     )
 
-    u_sim[:, sim_time] = u_bar[:, 0]
+    Rotm = np.array([[np.cos(yaw), np.sin(yaw)], [-np.sin(yaw), np.cos(yaw)]])
 
-    # Measure elpased time to get results from cvxpy
-    opt_time.append(time.time() - iter_start)
+    outline = (outline.T.dot(Rotm)).T
 
-    # move simulation to t+1
-    tspan = [0, DT]
-    x_sim[:, sim_time + 1] = odeint(kinematics_model, x_sim[:, sim_time], tspan, args=(u_bar[:, 0],))[1]
+    outline[0, :] += x
+    outline[1, :] += y
 
-print(
-    "CVXPY Optimization Time: Avrg: {:.4f}s Max: {:.4f}s Min: {:.4f}s".format(
-        np.mean(opt_time), np.max(opt_time), np.min(opt_time)
+    plt.plot(
+        np.array(outline[0, :]).flatten(), np.array(outline[1, :]).flatten(), "tab:blue"
     )
-)
 
-plot_results(x_sim, u_sim, track)
 
+def do_sim():
+    sim = MPCSim()
+    try:
+        sim.run()
+    except Exception as e:
+        sys.exit(e)
+
+
+if __name__ == "__main__":
+    do_sim()
